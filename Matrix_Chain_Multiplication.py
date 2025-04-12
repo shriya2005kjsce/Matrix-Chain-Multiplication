@@ -1,101 +1,214 @@
 import streamlit as st
-import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 
-def matrix_chain_multiplication_visual(dimensions, delay=0.5):
-    n = len(dimensions) - 1
-    m = [[0 if i == j else float('inf') for j in range(n)] for i in range(n)]
-    s = [[0 for _ in range(n)] for _ in range(n)]
-
-    fig, axs = plt.subplots(1, 2, figsize=(12, 5))
-    fig.suptitle("Matrix Chain Multiplication DP Table Filling", fontsize=16)
-
-    frames = []
-
-    for l in range(1, n):
-        for i in range(n - l):
-            j = i + l
-            for k in range(i, j):
-                cost = m[i][k] + m[k + 1][j] + dimensions[i] * dimensions[k + 1] * dimensions[j + 1]
-                if cost < m[i][j]:
-                    m[i][j] = cost
-                    s[i][j] = k
-            frames.append((np.array(m, dtype=object).copy(), np.array(s, dtype=object).copy(), i, j))
-
-    plt.close(fig)
-    return m, s, frames
-
-def draw_tables(m, s, current_i=None, current_j=None):
-    n = len(m)
-    fig, axs = plt.subplots(1, 2, figsize=(12, 5))
-    axs[0].set_title("Cost Table (m)")
-    axs[1].set_title("Split Table (s)")
-    axs[0].imshow(m, cmap='Blues', vmin=0)
-    axs[1].imshow(s, cmap='Oranges', vmin=0)
-
-    for i in range(n):
-        for j in range(n):
-            if j >= i:
-                val_m = m[i][j] if m[i][j] != float('inf') else '∞'
-                color = 'red' if (i == current_i and j == current_j) else 'black'
-                axs[0].text(j, i, f"{val_m}", ha='center', va='center', fontsize=10, color=color)
-                axs[1].text(j, i, f"{s[i][j]}", ha='center', va='center', fontsize=10)
-
-    axs[0].set_xticks(np.arange(n))
-    axs[0].set_yticks(np.arange(n))
-    axs[1].set_xticks(np.arange(n))
-    axs[1].set_yticks(np.arange(n))
-
-    st.pyplot(fig)
-
+# Helper to print optimal parenthesis
 def print_optimal_parenthesization(s, i, j):
     if i == j:
         return f"A{i+1}"
     else:
         return f"({print_optimal_parenthesization(s, i, s[i][j])} × {print_optimal_parenthesization(s, s[i][j]+1, j)})"
 
-# ------------------ Streamlit App --------------------
+# Initialize session state
+def initialize_session_state():
+    if 'initialized' not in st.session_state:
+        st.session_state.initialized = False
+    if 'dimensions' not in st.session_state:
+        st.session_state.dimensions = [5, 2, 4, 7]
+    if 'm' not in st.session_state:
+        st.session_state.m = None
+    if 's' not in st.session_state:
+        st.session_state.s = None
+    if 'current_l' not in st.session_state:
+        st.session_state.current_l = 1
+    if 'current_i' not in st.session_state:
+        st.session_state.current_i = 0
+    if 'current_j' not in st.session_state:
+        st.session_state.current_j = 1
+    if 'current_k' not in st.session_state:
+        st.session_state.current_k = 0
+    if 'best_k' not in st.session_state:
+        st.session_state.best_k = -1
+    if 'best_cost' not in st.session_state:
+        st.session_state.best_cost = float('inf')
+    if 'step_phase' not in st.session_state:
+        st.session_state.step_phase = 'start'
+    if 'k_costs' not in st.session_state:
+        st.session_state.k_costs = []
+    if 'algorithm_complete' not in st.session_state:
+        st.session_state.algorithm_complete = False
+    if 'show_final_result' not in st.session_state:
+        st.session_state.show_final_result = False
+    if 'step_count' not in st.session_state:
+        st.session_state.step_count = 0
 
-st.set_page_config(page_title="Matrix Chain Multiplication", layout="centered")
-st.title("📐 Matrix Chain Multiplication Visualizer")
-st.markdown("""
-Enter the dimensions of matrices such that matrix A<sub>1</sub> has dimension `d0 x d1`, A<sub>2</sub> is `d1 x d2`, etc.
-""", unsafe_allow_html=True)
+# Reset algorithm for new input or restart
+def reset_algorithm():
+    st.session_state.initialized = True
+    dimensions = st.session_state.dimensions
+    n = len(dimensions) - 1
+    
+    st.session_state.m = [[0 for _ in range(n)] for _ in range(n)]
+    st.session_state.s = [[0 for _ in range(n)] for _ in range(n)]
+    
+    st.session_state.current_l = 1
+    st.session_state.current_i = 0
+    st.session_state.current_j = 1
+    st.session_state.current_k = 0
+    st.session_state.best_k = -1
+    st.session_state.best_cost = float('inf')
+    st.session_state.step_phase = 'start'
+    st.session_state.k_costs = []
+    st.session_state.algorithm_complete = False
+    st.session_state.show_final_result = False
+    st.session_state.step_count = 0
 
-dim_input = st.text_input("Enter matrix dimensions (e.g., `5 4 6 2 7`):", "5 4 6 2 7")
-dimensions = list(map(int, dim_input.strip().split()))
+# Full execution of the algorithm
+def run_full_algorithm():
+    dimensions = st.session_state.dimensions
+    n = len(dimensions) - 1
+    m = [[0 for _ in range(n)] for _ in range(n)]
+    s = [[0 for _ in range(n)] for _ in range(n)]
+    
+    for l in range(1, n):
+        for i in range(n - l):
+            j = i + l
+            m[i][j] = float('inf')
+            for k in range(i, j):
+                cost = m[i][k] + m[k+1][j] + dimensions[i] * dimensions[k+1] * dimensions[j+1]
+                if cost < m[i][j]:
+                    m[i][j] = cost
+                    s[i][j] = k
+    
+    st.session_state.m = m
+    st.session_state.s = s
+    st.session_state.algorithm_complete = True
+    st.session_state.show_final_result = True
 
-if len(dimensions) < 2:
-    st.warning("Please enter at least two dimensions.")
-    st.stop()
+# Step-by-step execution logic
+def handle_next_step():
+    if st.session_state.algorithm_complete:
+        return
 
-if 'frames' not in st.session_state:
-    m, s, frames = matrix_chain_multiplication_visual(dimensions)
-    st.session_state.frames = frames
-    st.session_state.final_m = m
-    st.session_state.final_s = s
-    st.session_state.step = 0
+    st.session_state.step_count += 1
 
-# Step controller
-if st.button("🔄 Reset"):
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.experimental_rerun()
+    n = len(st.session_state.dimensions) - 1
+    
+    if st.session_state.step_phase == 'start':
+        i = st.session_state.current_i
+        j = st.session_state.current_j
+        st.session_state.m[i][j] = float('inf')
+        st.session_state.current_k = i
+        st.session_state.best_k = -1
+        st.session_state.best_cost = float('inf')
+        st.session_state.k_costs = []
+        st.session_state.step_phase = 'evaluate_k'
+    
+    elif st.session_state.step_phase == 'evaluate_k':
+        i = st.session_state.current_i
+        j = st.session_state.current_j
+        k = st.session_state.current_k
+        dimensions = st.session_state.dimensions
+        
+        cost = (st.session_state.m[i][k] +
+                st.session_state.m[k+1][j] +
+                dimensions[i] * dimensions[k+1] * dimensions[j+1])
+        
+        st.session_state.k_costs.append((k, cost))
+        
+        if cost < st.session_state.best_cost:
+            st.session_state.best_cost = cost
+            st.session_state.best_k = k
+        
+        if k + 1 < j:
+            st.session_state.current_k += 1
+        else:
+            st.session_state.step_phase = 'update_best'
+    
+    elif st.session_state.step_phase == 'update_best':
+        i = st.session_state.current_i
+        j = st.session_state.current_j
+        st.session_state.m[i][j] = st.session_state.best_cost
+        st.session_state.s[i][j] = st.session_state.best_k
+        st.session_state.step_phase = 'next_cell'
+    
+    elif st.session_state.step_phase == 'next_cell':
+        i = st.session_state.current_i
+        j = st.session_state.current_j
+        l = st.session_state.current_l
+        
+        if i + 1 < len(st.session_state.dimensions) - 1 - l:
+            st.session_state.current_i += 1
+            st.session_state.current_j += 1
+            st.session_state.step_phase = 'start'
+        else:
+            st.session_state.current_l += 1
+            if st.session_state.current_l < len(st.session_state.dimensions) - 1:
+                st.session_state.current_i = 0
+                st.session_state.current_j = st.session_state.current_l
+                st.session_state.step_phase = 'start'
+            else:
+                st.session_state.algorithm_complete = True
+                st.session_state.show_final_result = True
+                st.session_state.step_phase = 'complete'
 
-if st.button("▶️ Next Step"):
-    if st.session_state.step < len(st.session_state.frames) - 1:
-        st.session_state.step += 1
+# Display m and s matrices
+def display_matrix_tables():
+    st.write("### 📊 Cost Matrix (m)")
+    df_m = pd.DataFrame(st.session_state.m).fillna("")
+    st.dataframe(df_m, use_container_width=True)
 
-step = st.session_state.step
-frames = st.session_state.frames
-m_frame, s_frame, i, j = frames[step]
+    st.write("### 🔁 Split Matrix (s)")
+    df_s = pd.DataFrame(st.session_state.s).fillna("")
+    st.dataframe(df_s, use_container_width=True)
 
-draw_tables(m_frame, s_frame, current_i=i, current_j=j)
-st.info(f"Step {step+1} of {len(frames)} — Evaluating A{i+1} to A{j+1}")
+# Final result output
+def display_final_result():
+    if st.session_state.show_final_result:
+        st.write("## ✅ Optimal Parenthesization:")
+        expr = print_optimal_parenthesization(st.session_state.s, 0, len(st.session_state.dimensions) - 2)
+        st.success(expr)
 
-if st.session_state.step == len(frames) - 1:
-    final_m = st.session_state.final_m
-    final_s = st.session_state.final_s
-    st.success(f"✅ Minimum scalar multiplications: **{final_m[0][len(dimensions) - 2]}**")
-    st.write("**Optimal Parenthesization:**")
-    st.code(print_optimal_parenthesization(final_s, 0, len(dimensions)-2))
+        st.write("## 🧮 Minimum Multiplication Cost:")
+        st.code(st.session_state.m[0][len(st.session_state.dimensions) - 2])
+
+# MAIN APP
+def main():
+    st.set_page_config(page_title="Matrix Chain Multiplication Visualizer", layout="centered")
+    st.title("📦 Matrix Chain Multiplication Visualizer")
+
+    initialize_session_state()
+
+    with st.expander("🛠️ Input Matrix Dimensions"):
+        default = ", ".join(map(str, st.session_state.dimensions))
+        user_input = st.text_input("Enter dimensions (comma-separated):", value=default)
+        if st.button("Set Dimensions"):
+            try:
+                dims = list(map(int, user_input.split(",")))
+                if len(dims) >= 2:
+                    st.session_state.dimensions = dims
+                    reset_algorithm()
+                    st.success("Dimensions updated and algorithm reset.")
+                else:
+                    st.warning("Please enter at least two numbers.")
+            except:
+                st.error("Invalid input. Please enter integers separated by commas.")
+
+    st.markdown("### 🔢 Step Number: **" + str(st.session_state.step_count) + "**")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("▶️ Next Step"):
+            handle_next_step()
+    with col2:
+        if st.button("🚀 Run Full Algorithm"):
+            run_full_algorithm()
+    with col3:
+        if st.button("🔄 Reset"):
+            reset_algorithm()
+
+    display_matrix_tables()
+    display_final_result()
+
+if __name__ == "__main__":
+    main()
