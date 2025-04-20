@@ -24,6 +24,10 @@ This app helps you:
 - 🔍 *Understand* the math behind each decision
 - 🧾 *Get the final result* with the best way to parenthesize the matrix chain
 
+## 🚀 Try It Out
+🌐 Link to open the deployable version of this repository: [https://shriyadhriti.streamlit.app/](https://shriyadhriti.streamlit.app/)
+🧠 Script Reference: http://Matrix-Chain-Multiplication.py
+
 ## 🛠 How to Use It
 
 ### 🔧 Running It Locally
@@ -48,3 +52,4 @@ This app helps you:
 - **Saniya Navelkar** – 16010123300  
 - **Shreya Nair** – 16010123323  
 - **Shriya Shetty** – 16010123327
+
