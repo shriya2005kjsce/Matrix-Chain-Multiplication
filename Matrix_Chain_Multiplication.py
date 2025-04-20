@@ -34,7 +34,7 @@ def matrix_chain_order(p):
         for i in range(n - chain_len + 1):
             j = i + chain_len - 1
             m[i][j] = float('inf')
-            for k in range(i, j):
+            for k in range(i+1, j):
                 cost = m[i][k] + m[k + 1][j] + p[i] * p[k + 1] * p[j + 1]
                 if cost < m[i][j]:
                     m[i][j] = cost
